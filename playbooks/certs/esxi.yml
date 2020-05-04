@@ -1,0 +1,33 @@
+---
+
+- hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Include vars files
+      include_vars:
+        file: "{{ playbook_dir }}/vars/ler53_vars.yml"
+
+    - include: "{{ playbook_dir }}/ler53.yml"
+      vars:
+        ler53_cert_common_name: "{{ hostvars[item]['ler53_cert_common_name'] }}"
+      with_items: "{{ groups['esxi'] }}"
+
+- hosts: esxi
+  gather_facts: yes
+  vars_files:
+    - "{{ playbook_dir }}/vars/ler53_vars.yml"
+  tasks:
+    - name: copy key to host
+      copy:
+        src: "{{ ler53_cert_dir }}/{{ inventory_hostname }}.key"
+        dest: "/etc/vmware/ssl/rui.key"
+
+    - name: copy cert to host
+      copy:
+        src: "{{ ler53_cert_dir }}/{{ inventory_hostname }}.pem"
+        dest: "/etc/vmware/ssl/rui.crt"
+      register: cert
+
+    - name: restart hostd
+      command: /etc/init.d/hostd restart
+      when: cert is changed

@@ -1,0 +1,16 @@
+---
+
+- name: Load some default variables
+  include_vars:
+    file: "{{ playbook_dir }}/vars/ler53_vars.yml"
+
+- name: Obtain SSL cert for VCSA
+  include_role:
+    name: /Users/mohitsharma44/devel/ansible-role-lets-encrypt-route-53
+
+- name: Download x3-cross-signed LE cert
+  get_url:
+    url: https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt
+    dest: "{{ ler53_cert_dir }}/x3-cross-signed.pem"
+    mode: '0640'
+  delegate_to: localhost

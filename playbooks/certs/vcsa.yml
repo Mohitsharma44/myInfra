@@ -1,0 +1,77 @@
+---
+- hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Include vars files
+      include_vars:
+        file: "{{ playbook_dir }}/vars/ler53_vars.yml"
+
+    - include: "{{ playbook_dir }}/ler53.yml"
+      vars:
+        ler53_cert_common_name: "{{ hostvars[item]['ler53_cert_common_name'] }}"
+      with_items: "{{ groups['vcsa'] }}"
+      become: yes
+
+- hosts: vcsa
+  gather_facts: yes
+  vars_files:
+    - "{{ playbook_dir }}/vars/ler53_vars.yml"
+  vars:
+    - ler53_cert_common_name: "{{ inventory_hostname }}"
+  tasks:
+    - name: Get information on generated certificate
+      openssl_certificate_info:
+        path: "{{ ler53_cert_dir }}/x3-cross-signed.pem"
+      register: result
+      delegate_to: localhost
+
+    - name: Set Authority_key_identifier as fact
+      set_fact:
+        cn_id_string: "CN(id):\t\t{{ result.authority_key_identifier.split(':') | join('') | upper }}"
+      delegate_to: localhost
+
+    - name: Get list of trusted CA certs
+      expect:
+        command: /usr/lib/vmware-vmafd/bin/dir-cli trustedcert list
+        responses:
+          "Enter password .*:": "{{ vcenter_pass }}"
+      register: ca_certs
+
+    - name: Add x3-cross-signed cert to trustedcert in VCSA
+      block:
+        - name: Copy x3-cross-signed LE cert to VCSA
+          copy:
+            src: "{{ ler53_cert_dir }}/x3-cross-signed.pem"
+            dest: "/root/x3-cross-signed.pem"
+        - name: Publish the root certificate to vmdir
+          expect:
+            command: /usr/lib/vmware-vmafd/bin/dir-cli trustedcert publish --chain --cert /root/x3-cross-signed.pem
+            responses:
+              "Enter password .*:": "{{ vcenter_pass }}"
+      when: "cn_id_string not in ca_certs.stdout_lines"
+
+    - name: Copy SSL certs and keys to VCSA
+      copy:
+        src: "{{ item }}"
+        dest: "/tmp/{{ item | basename}}"
+      with_items:
+        - "{{ ler53_cert_dir }}/{{ inventory_hostname }}.pem"
+        - "{{ ler53_cert_dir }}/{{ inventory_hostname }}.key"
+
+    - name: Stop all services (this can take between 1 - 5 mins)
+      command: "service-control --stop --all"
+
+    - name: Start vmafdd vmdird and vmcad
+      command: "service-control --start vmafdd vmdird vmcad"
+
+    - name: Deleting current MACHINE_SSL_CERT
+      command: "/usr/lib/vmware-vmafd/bin/vecs-cli entry delete --store MACHINE_SSL_CERT --alias __MACHINE_CERT -y"
+
+    - name: Copying new SSL cert as MACHINE_SSL_CERT
+      command: "/usr/lib/vmware-vmafd/bin/vecs-cli entry create --store MACHINE_SSL_CERT --alias __MACHINE_CERT --cert /tmp/{{ inventory_hostname }}.pem --key /tmp/{{ inventory_hostname }}.key"
+
+    - name: Stop all services
+      command: "service-control --stop --all"
+
+    - name: Start all services (this will take between 5 - 10 mins)
+      command: "service-control --start --all"
