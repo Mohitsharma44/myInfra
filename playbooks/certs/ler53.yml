@@ -6,7 +6,7 @@
 
 - name: Obtain SSL cert for VCSA
   include_role:
-    name: /Users/mohitsharma44/devel/ansible-role-lets-encrypt-route-53
+    name: ansible-role-lets-encrypt-route-53
 
 - name: Download x3-cross-signed LE cert
   get_url:
