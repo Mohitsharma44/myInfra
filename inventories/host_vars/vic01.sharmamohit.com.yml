@@ -1,0 +1,4 @@
+ansible_host: 192.168.11.12
+ansible_python_interpreter: auto_legacy_silent
+vic_server: 192.168.11.12
+ler53_cert_common_name: vic01.sharmamohit.com
