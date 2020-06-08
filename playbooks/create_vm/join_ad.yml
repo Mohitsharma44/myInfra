@@ -1,0 +1,194 @@
+---
+# Playbook to join an existing AD domain
+
+- name: Update hostname
+  hostname:
+    name: "{{ hostname }}"
+
+- name: Disable systemd-resolved
+  service:
+    name: systemd-resolved
+    enabled: no
+    state: stopped
+
+- name: Manually add the resolv.conf entry
+  block:
+    - name: Remove /etc/resolv.conf symlink
+      file:
+        path: "/etc/resolv.conf"
+        state: absent
+
+    - name: Add custom resolv.conf entry
+      blockinfile:
+        path: /etc/resolv.conf
+        block: |
+          domain {{ domain }}
+          nameserver {{ dns_server }}
+          search {{ domain }}
+        create: yes
+
+- name: Install dependencies
+  block:
+    - name: Remove old version of adcli if exists
+      package:
+        name: adcli=0.8*
+        state: absent
+
+    - name: Install adcli v 0.9.0-1 (Fix for https://bugs.launchpad.net/ubuntu/+source/adcli/+bug/1842951)
+      apt:
+        deb: http://ftp.de.debian.org/debian/pool/main/a/adcli/adcli_0.9.0-1_amd64.deb
+
+    - name: Install packages to join the realm
+      package:
+        name:
+          - realmd
+          - libnss-sss
+          - libpam-sss
+          - sssd
+          - sssd-tools
+          - samba-common-bin
+          - oddjob
+          - oddjob-mkhomedir
+          - packagekit
+          - python3
+          - python3-pip
+        state: present
+
+- name: Setup NTP
+  include_role:
+    name: geerlingguy.ntp
+
+- name: Install pexpect for working with interactive prompts
+  pip:
+    name: pexpect
+
+- name: Discover AD domain
+  shell: /bin/bash -c "/usr/sbin/realm discover {{ ad_server.domain }} | grep 'configured:' | awk '{print $2}'"
+  changed_when: false
+  register: ad_found
+
+- debug:
+    msg: "AD_FOUND OUTPUT:\n{{ ad_found }}"
+
+- name: Join the machine to AD domain
+  expect:
+    command: /bin/bash -c "/usr/sbin/realm join -U {{ ad_server.admin_user }} {{ ad_server.domain }}"
+    responses:
+      Password.*: "{{ ad_server.admin_pass }}"
+  when: "ad_found.stdout.split(': ')[-1] == 'no'"
+  failed_when: "ad_found.stdout.split(': ')[-1] != 'no'"
+
+- name: Enable creating home directory for user
+  block:
+    - name: Remove default mkhomedir pam config
+      file:
+        path: "/usr/share/pam-configs/mkhomedir"
+        state: absent
+
+    - name: Add custom mkhomedir pam config
+      lineinfile:
+        path: /usr/share/pam-configs/mkhomedir
+        create: yes
+        line: "{{ item }}"
+      with_items:
+        - "Name: activate mkhomedir"
+        - "Default: yes"
+        - "Priority: 900"
+        - "Session-Type: Additional"
+        - "Session:"
+        - "       required            pam_mkhomedir.so umask=0022 skel=/etc/skel"
+
+- name: Ugly hack to Activate mkhomedir because some things cannot be scripted for pam-auth-update (https://bugs.launchpad.net/ubuntu/+source/pam/+bug/682662)
+  block:
+    - name: Install debconf-utils
+      package:
+        name: debconf-utils
+        state: present
+
+    - name: Add mkhomedir to debconf database
+      shell: echo libpam-runtime libpam-runtime/profiles multiselect mkhomedir | debconf-set-selections
+
+    - name: Find all /etc/pam.d/common-* files
+      find:
+        paths: /etc/pam.d/
+        patterns: common-*
+      register: common_pam_files_to_delete
+      tags:
+        - foo
+
+    - name: Cleanup
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ common_pam_files_to_delete | json_query('files[*].path') }}"
+        - "/var/lib/pam/seen"
+
+    - name: Force reload pam-auth-update to uptake the mkhomedir option
+      command: /bin/bash -c "DEBIAN_FRONTEND=noninteractive /usr/sbin/pam-auth-update --enable mkhomedir"
+      register: mkhomedir_activated
+
+- name: Set allowed groups to login
+  block:
+    - name: Permit AD groups if specified
+      command: /bin/bash -c "/usr/sbin/realm permit -g {{ item }}"
+      with_items: "{{ permit_ad_groups }}"
+      when: permit_ad_groups is defined
+
+    - name: Permit all AD groups if no specific group is defined
+      command: /bin/bash -c "/usr/sbin/realm permit --all"
+      when: permit_ad_groups is not defined
+
+    - name: Deny all AD groups if explicitly specified
+      command: /bin/bash -c "/usr/sbin/realm deny --all"
+      when: deny_all_domain_users| default(false)| bool
+
+- name: Configure sudo access for groups
+  lineinfile:
+    path: "/etc/sudoers.d/{{ item.split() | join('_') | lower }}"
+    line: "%{{ item | regex_replace('[ ]', '\\ ') | lower }}  ALL=(ALL)  ALL"
+    create: yes
+  with_items: "{{ ad_server.sudo_groups }}"
+
+- name: Custom sssd conf file
+  block:
+    - name: Remove current sssd config file
+      file:
+        path: /etc/sssd/sssd.conf
+        state: absent
+
+    - name: Add custom sssd conf file
+      blockinfile:
+        path: /etc/sssd/sssd.conf
+        create: yes
+        mode: 0600
+        owner: root
+        group: root
+        block: |
+          [sssd]
+          domains = {{ domain }}
+          config_file_version = 2
+          services = nss, pam
+          default_domain_suffix = {{ domain }}
+
+          [domain/{{ domain }}]
+          default_shell = /bin/bash
+          ad_server = {{ ad_server.domain }}
+          krb5_store_password_if_offline = True
+          cache_credentials = True
+          krb5_realm = {{ domain| upper }}
+          realmd_tags = manages-system joined-with-adcli
+          id_provider = ad
+          fallback_homedir = /home/%u
+          full_name_format = %1$s
+          ad_domain = {{ domain }}
+          #use_fully_qualified_names = True
+          ldap_id_mapping = True
+          access_provider = simple
+          simple_allow_groups = Domain Admins, Domain, Admins
+
+- name: Restart sssd
+  service:
+    name: sssd
+    enabled: yes
+    state: restarted

@@ -1,0 +1,37 @@
+---
+
+datacenter_name: "Phoenix"
+vm_folder_name: "VMLab"
+linux_template: "ubuntu-1604-template"
+dns_domain: "sharmamohit.com"
+target_esx_datastore: "Silo"
+vcenter_fqdn: "vcsa01.sharmamohit.com"
+
+# VM config
+vm_name: "testbuntu"
+disk_size_gb: 10
+num_cpu: 2
+ram_mb: 2048
+
+# For AD stuff
+hostname: "{{ vm_name }}.{{ dns_domain }}"
+domain: "{{ dns_domain }}"
+dns_server: 192.168.11.1
+ad_server:
+  domain: "ad.{{ dns_domain }}"
+  ip: 192.168.11.51
+  base_dn: "DC=sharmamohit,DC=com"
+  admin_user: Administrator
+  admin_pass: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          61616338373539363765643837313730623230376533383331383638323035323662323232333739
+          3534353736346135373534303633633435333463626566320a613661666239313238656631656130
+          38613731613030613935643637333336643033633130616162396164313535373263633231396535
+          6233333433383732610a666466633232616238623836626439623730333130356566366530653961
+          6662
+  sudo_groups:
+    - Domain Admins
+permit_ad_groups:
+  - Domain Admins
+  - Domain Users
+deny_all_domain_users: false
