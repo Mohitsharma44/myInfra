@@ -139,4 +139,5 @@ cython_debug/
 
 prod_certs
 .vmware_inventory_password
+.vault_password
 .#*
