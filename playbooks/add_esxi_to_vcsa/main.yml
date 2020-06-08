@@ -1,0 +1,14 @@
+---
+
+- host: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Create Datacenter
+      vmware_datacenter:
+        hostname: '{{ vcenter_hostname }}'
+        username: '{{ vcenter_username }}'
+        password: '{{ vcenter_password }}'
+        datacenter_name: '{{ datacenter_name }}'
+        state: present
+      delegate_to: localhost
