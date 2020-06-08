@@ -1,0 +1,63 @@
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+---
+# defaults file for vcsa-deploy
+
+# Prereqs.yml variables
+repo_dir: "{{ playbook_dir }}/files"
+vcsa_iso: "VMware-VCSA-all-6.7.0-8217866.iso"
+vcsa_task_directory: "{{ role_path }}/tasks"
+
+mount_dir_path: "/Volumes/VMwareVCSA"
+ovftool: "{{ mount_dir_path }}/vcsa/ovftool/mac/ovftool"
+vcsa_ova: "vcsa/VMware-vCenter-Server-Appliance-6.7.0.10000-8217866_OVF10.ova"
+
+appliance_type: "embedded"
+
+# deploy.yml and deploy_appliance.yml variables
+network_ip_scheme: static
+disk_mode: "thin"
+
+vcenter_appliance_name: "vcsa01"
+vcenter_appliance_size: "small"
+
+target_esx_datastore: "Silo"
+target_esx_portgroup: "VM Network"
+
+ssh_enable: true
+time_tools_sync: false
+net_addr_family: "ipv4"
+
+vcenter_password: "{{ vcenter_pass }}"
+vcenter_fqdn: "vcsa01.sharmamohit.com"
+vcenter_ip_address: "192.168.11.11"
+vcenter_netmask: "255.255.225.0"
+vcenter_gateway: "192.168.11.1"
+vcenter_net_prefix: "24"
+
+dns_servers:
+  - 192.168.11.1
+ntp_servers:
+  - 192.168.11.1
+
+target_esxi: "esxi01.sharmamohit.com"
+target_esxi_username: "{{ esxi_user }}"
+target_esxi_password: "{{ esxi_pass }}"
+
+sso_password: "{{ vcenter_pass }}"
+sso_site_name: "HomeLab"
+sso_domain_name: "sharmamohit.com"
+
+datacenter_name: "Phoenix"
+cluster_name: "HomeLab"

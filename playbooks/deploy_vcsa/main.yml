@@ -1,0 +1,62 @@
+---
+
+- hosts: localhost
+  gather_facts: yes
+  vars_files:
+    - default/main.yml
+
+  #roles:
+    #- vcsa-deploy
+
+  tasks:
+    - name: Create Datacenter
+      vmware_datacenter:
+        hostname: '{{ vcenter_fqdn }}'
+        username: '{{ vcenter_user }}'
+        password: '{{ vcenter_pass }}'
+        datacenter_name: '{{ datacenter_name }}'
+        validate_certs: false
+        state: present
+      delegate_to: localhost
+
+    - name: Create Cluster
+      vmware_cluster:
+        hostname: '{{ vcenter_fqdn }}'
+        username: '{{ vcenter_user }}'
+        password: '{{ vcenter_pass }}'
+        datacenter_name: '{{ datacenter_name }}'
+        cluster_name: '{{ cluster_name }}'
+        enable_ha: no
+        enable_drs: no
+        enable_vsan: no
+        validate_certs: false
+        state: absent
+      delegate_to: localhost
+
+    - name: Create a VM folder on given datacenter
+      vcenter_folder:
+        hostname: '{{ vcenter_fqdn }}'
+        username: '{{ vcenter_user }}'
+        password: '{{ vcenter_pass }}'
+        datacenter_name: '{{ datacenter_name }}'
+        folder_name: PhoenixHosts
+        folder_type: host
+        state: present
+        validate_certs: false
+      register: vm_folder_creation_result
+      delegate_to: localhost
+
+    - name: Add ESXi Host to vCenter
+      vmware_host:
+        hostname: '{{ vcenter_fqdn }}'
+        username: '{{ vcenter_user }}'
+        password: '{{ vcenter_pass }}'
+        datacenter: '{{ datacenter_name }}'
+        folder: '{{ datacenter_name }}'
+        #cluster_name: '{{ cluster_name }}'
+        esxi_hostname: '{{ target_esxi }}'
+        esxi_username: '{{ esxi_user }}'
+        esxi_password: '{{ esxi_pass }}'
+        validate_certs: false
+        state: present
+      delegate_to: localhost
