@@ -12,20 +12,12 @@
     state: stopped
 
 - name: Manually add the resolv.conf entry
-  block:
-    - name: Remove /etc/resolv.conf symlink
-      file:
-        path: "/etc/resolv.conf"
-        state: absent
-
-    - name: Add custom resolv.conf entry
-      blockinfile:
-        path: /etc/resolv.conf
-        block: |
-          domain {{ domain }}
-          nameserver {{ dns_server }}
-          search {{ domain }}
-        create: yes
+  template:
+    src: files/resolv.conf.j2
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: '0644'
 
 - name: Install dependencies
   block:
@@ -67,6 +59,10 @@
   changed_when: false
   register: ad_found
 
+- name: Set fact based on if we need to join AD
+  set_fact:
+    join_ad: "{{ ad_found.stdout.split(': ')[-1] == 'no' | ternary(False, True) }}"
+
 - debug:
     msg: "AD_FOUND OUTPUT:\n{{ ad_found }}"
 
@@ -75,8 +71,9 @@
     command: /bin/bash -c "/usr/sbin/realm join -U {{ ad_server.admin_user }} {{ ad_server.domain }}"
     responses:
       Password.*: "{{ ad_server.admin_pass }}"
-  when: "ad_found.stdout.split(': ')[-1] == 'no'"
-  failed_when: "ad_found.stdout.split(': ')[-1] != 'no'"
+  #when: "ad_found.stdout.split(': ')[-1] == 'no'"
+  when: join_ad
+  failed_when: join_ad
 
 - name: Enable creating home directory for user
   block:
@@ -97,6 +94,7 @@
         - "Session-Type: Additional"
         - "Session:"
         - "       required            pam_mkhomedir.so umask=0022 skel=/etc/skel"
+  when: join_ad
 
 - name: Ugly hack to Activate mkhomedir because some things cannot be scripted for pam-auth-update (https://bugs.launchpad.net/ubuntu/+source/pam/+bug/682662)
   block:
@@ -125,8 +123,9 @@
         - "/var/lib/pam/seen"
 
     - name: Force reload pam-auth-update to uptake the mkhomedir option
-      command: /bin/bash -c "DEBIAN_FRONTEND=noninteractive /usr/sbin/pam-auth-update --enable mkhomedir"
+      command: /bin/bash -c "DEBIAN_FRONTEND=noninteractive /usr/sbin/pam-auth-update --force"
       register: mkhomedir_activated
+  when: join_ad
 
 - name: Set allowed groups to login
   block:
@@ -142,6 +141,7 @@
     - name: Deny all AD groups if explicitly specified
       command: /bin/bash -c "/usr/sbin/realm deny --all"
       when: deny_all_domain_users| default(false)| bool
+  when: join_ad
 
 - name: Configure sudo access for groups
   lineinfile:
@@ -149,6 +149,8 @@
     line: "%{{ item | regex_replace('[ ]', '\\ ') | lower }}  ALL=(ALL)  ALL"
     create: yes
   with_items: "{{ ad_server.sudo_groups }}"
+  register: reconfigured_groups
+  changed_when: reconfigured_groups.changed
 
 - name: Custom sssd conf file
   block:
@@ -186,9 +188,15 @@
           ldap_id_mapping = True
           access_provider = simple
           simple_allow_groups = Domain Admins, Domain, Admins
+  when: join_ad
 
-- name: Restart sssd
+- name: Restart services
   service:
-    name: sssd
+    name: "{{ item }}"
     enabled: yes
     state: restarted
+  with_items:
+    - sssd
+    - ssh
+  when:
+    - (reconfigured_groups.changed) or (join_ad)

@@ -1,0 +1,86 @@
+---
+
+- name: Clone a VM from linux template
+  vmware_guest:
+    hostname: "{{ vcenter_fqdn }}"
+    username: "{{ vcenter_user }}"
+    password: "{{ vcenter_pass }}"
+    validate_certs: no
+    datacenter: "{{ datacenter_name }}"
+    folder: "{{ vm_folder_name }}"
+    template: "{{ linux_template }}"
+    name: "{{ vm_name }}"
+    state: poweredon
+    networks:
+      - name: VM Network
+        #     ip: 192.168.10.11
+        #     netmask: 255.255.255.0
+    wait_for_ip_address: True
+    disk:
+      - size_gb: "{{ disk_size_gb }}"
+        type: thin
+        datastore: "{{ target_esx_datastore }}"
+    hardware:
+      memory_mb: "{{ ram_mb }}"
+      num_cpus: "{{ num_cpu }}"
+      num_cpu_cores_per_socket: 1
+      scsi: paravirtual
+      max_connections: 5
+      hotadd_cpu: True
+      hotremove_cpu: True
+      hotadd_memory: True
+      version: 14
+      boot_firmware: "efi"
+    customization:
+      domain: "{{ dns_domain }}"
+      dns_servers:
+        - "{{ dns_server }}"
+      dns_suffix:
+        - "{{ dns_domain }}"
+  delegate_to: localhost
+  register: new_vm
+
+- name: Gather information about the VM
+  vmware_vm_info:
+    hostname: "{{ vcenter_fqdn }}"
+    username: "{{ vcenter_user }}"
+    password: "{{ vcenter_pass }}"
+    validate_certs: no
+    folder: "/{{ datacenter_name }}/vm/{{ vm_folder_name }}"
+  delegate_to: localhost
+  register: vm_info
+
+- name: Set some facts about {{ vm_name }}
+  set_fact:
+    new_vm: "{{ new_vm|default({}) | combine( item ) }}"
+  with_items:
+    - "{{ vm_info.virtual_machines | json_query(query) }}"
+  vars:
+    query: "[?guest_name=='{{ vm_name }}']"
+  changed_when: False
+
+- name: Add host to group VMs
+  add_host:
+    name: "{{ new_vm.ip_address }}"
+    #hostname: "{{ new_vm.guest_name }}"
+    ansible_ssh_host: "{{ new_vm.guest_name }}.{{ dns_domain }}"
+    ansible_python_interpreter: /usr/bin/python3
+    groups: "VMs"
+  changed_when: False
+
+- name: Flush Mac DNS cache
+  shell: "dscacheutil -flushcache; sudo killall -HUP mDNSResponder"
+  delegate_to: localhost
+  become: yes
+  when: new_vm.changed
+
+- name: Wait for {{ vm_name }} to become accessible
+  wait_for:
+    port: 22
+    host: "{{ new_vm.ip_address }}"
+    search_regex: OpenSSH
+    delay: 5
+  connection: local
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  when: new_vm.changed
