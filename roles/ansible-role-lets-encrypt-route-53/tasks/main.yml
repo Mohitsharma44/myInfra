@@ -75,6 +75,7 @@
 
 - name: "importing virtualenv tasks"
   import_tasks: virtualenv.yml
+  when: ansible_os_family in ['RedHat', 'Darwin']
 
 - name: generate the private key
   openssl_privatekey:

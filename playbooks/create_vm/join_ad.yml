@@ -46,10 +46,6 @@
           - python3-pip
         state: present
 
-- name: Setup NTP
-  include_role:
-    name: geerlingguy.ntp
-
 - name: Install pexpect for working with interactive prompts
   pip:
     name: pexpect

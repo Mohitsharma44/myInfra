@@ -12,6 +12,14 @@
   tags:
   - install
 
+- name: Install virtualenv
+  pip:
+    name: virtualenv
+    state: present
+  when: ansible_os_family == 'Darwin'
+  tags:
+  - install
+
 - name: install pyOpenSSL and boto in a virtualenv
   pip:
     name: "{{ ler53_item.name }}"
@@ -32,33 +40,6 @@
   - name: cffi
   loop_control:
     loop_var: ler53_item
-  when: ansible_os_family == 'RedHat'
-  tags:
-  - install
-
-- name: Install virtualenv
-  pip:
-    name: virtualenv
-    state: present
-  when: ansible_os_family == 'Darwin'
-  tags:
-  - install
-
-- name: Install cryptography and boto3 in virtualenv
-  pip:
-    name: "{{ ler53_item.name }}"
-    state: "{{ ler53_item.state | default(omit) }}"
-    version: "{{ ler53_item.version | default(omit) }}"
-    virtualenv: "{{ ler53_account_key_dir }}/ansible-lets-encrypt-virtualenv"
-    virtualenv_site_packages: yes
-  with_items:
-    - name: setuptools
-      state: latest
-    - name: boto
-    - name: cryptography
-  loop_control:
-    loop_var: ler53_item
-  when: ansible_os_family == 'Darwin'
   tags:
   - install
 
