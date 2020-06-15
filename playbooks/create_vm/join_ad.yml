@@ -57,19 +57,14 @@
 
 - name: Set fact based on if we need to join AD
   set_fact:
-    join_ad: "{{ ad_found.stdout.split(': ')[-1] == 'no' | ternary(False, True) }}"
-
-- debug:
-    msg: "AD_FOUND OUTPUT:\n{{ ad_found }}"
+    join_ad: "{{ (ad_found.stdout.split(': ')[-1] == 'no') | ternary(True, False) }}"
 
 - name: Join the machine to AD domain
   expect:
     command: /bin/bash -c "/usr/sbin/realm join -U {{ ad_server.admin_user }} {{ ad_server.domain }}"
     responses:
       Password.*: "{{ ad_server.admin_pass }}"
-  #when: "ad_found.stdout.split(': ')[-1] == 'no'"
   when: join_ad
-  failed_when: join_ad
 
 - name: Enable creating home directory for user
   block:
