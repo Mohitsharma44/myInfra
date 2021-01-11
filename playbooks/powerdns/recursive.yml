@@ -1,0 +1,44 @@
+---
+
+- hosts: dns
+  gather_facts: yes
+  vars:
+    external_dns_server: "192.168.40.1"
+    default_pdns_rec_config_dir: "/etc/powerdns-recursor"
+    pdns_rec_service_overrides:
+      LimitNOFILE: 10000
+    pdns_rec_config:
+      allow-from:
+        - 127.0.0.0/8
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 169.254.0.0/16
+        - 192.168.0.0/16
+        - 172.16.0.0/12
+      local-address: 0.0.0.0
+      local-port: 53
+      webserver: yes
+      webserver-address: 0.0.0.0
+      webserver-port: 8081
+      webserver-allow-from:
+        - 127.0.0.0/8
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 169.254.0.0/16
+        - 192.168.0.0/16
+        - 172.16.0.0/12
+      api-key: "powerdns"
+      threads: 5
+      max-mthreads: 8192
+      forward-zones:
+        - "corp.example.net=127.0.0.1:5300"
+        - "+.={{ external_dns_server }}"
+  pre_tasks:
+    - name: Downloading required roles
+      local_action: "command ansible-galaxy install -r {{ playbook_dir }}/files/requirements.yml --roles-path {{ playbook_dir }}/roles/"
+      become: false
+      run_once: True
+      changed_when: false
+  tasks:
+    - include_role:
+        name: PowerDNS.pdns_recursor

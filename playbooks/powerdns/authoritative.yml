@@ -1,0 +1,47 @@
+---
+
+- hosts: dns
+  gather_facts: yes
+  vars:
+    mysql_root_username: "root"
+    mysql_root_password: "{{ root_mysql_password }}"
+    default_pdns_config_dir: "/etc/powerdns"
+    pdns_install_repo:
+      apt_repo_origin: "repo.powerdns.com"
+      apt_repo: "deb [arch=amd64] http://repo.powerdns.com/{{ ansible_distribution | lower }} {{ ansible_distribution_release | lower }}-auth-44 main"
+      gpg_key: "http://repo.powerdns.com/FD380FBB-pub.asc"
+      gpg_key_id: "9FAAA5577E8FCF62093D036C1B0C6205FD380FBB"
+      yum_repo_baseurl: "http://repo.powerdns.com/centos/$basearch/$releasever/auth-44"
+      yum_debug_symbols_repo_baseurl: "http://repo.powerdns.com/centos/$basearch/$releasever/auth-44/debug"
+      name: "powerdns-auth-44"
+    pdns_config:
+      master: yes
+      slave: no
+      local-address: 0.0.0.0
+      local-port: 5300
+    pdns_backends:
+      'gmysql:one':
+        'user': powerdns
+        'host': 127.0.0.1
+        'port': 3306
+        'password': "{{ powerdns_mysql_password }}"
+        'dbname': pdns
+    pdns_mysql_databases_credentials:
+      'gmysql:one':
+        'priv_user': "{{ mysql_root_username }}"
+        'priv_password': "{{ root_mysql_password }}"
+        'priv_host':
+          - "%"
+  pre_tasks:
+    - name: Downloading required roles
+      local_action: "command ansible-galaxy install -r {{ playbook_dir }}/files/requirements.yml --roles-path {{ playbook_dir }}/roles/"
+      become: false
+      run_once: True
+      changed_when: false
+  tasks:
+    - include_role:
+        name: geerlingguy.mysql
+    - name: Force all notified handlers to run at this point
+      meta: flush_handlers
+    - include_role:
+        name: PowerDNS.pdns

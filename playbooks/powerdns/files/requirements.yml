@@ -1,0 +1,7 @@
+---
+- src: PowerDNS.pdns
+  version: v1.6.1
+- src: geerlingguy.mysql
+  version: 3.3.0
+- src: PowerDNS.pdns_recursor
+  version: v1.4.0
