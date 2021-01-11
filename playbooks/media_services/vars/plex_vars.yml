@@ -1,0 +1,24 @@
+---
+
+tautulli_install: true
+tautulli_version: v2.6.4
+tautulli_user: tautulli
+tautulli_group: tautulli
+tautulli_install_location: /opt/Tautulli/
+tautulli_config_location: /etc/tautulli-config.ini
+tautulli_data_location: "{{ tautulli_install_location }}/data"
+
+plexupdate_interval: daily
+plexupdate_version: master
+plexupdate_install: true
+plexupdate_autoinstall: true
+plexupdate_autoupdate: true
+plexupdate_autodelete: true
+plexupdate_install_location: /opt/plexupdate/
+plexupdate_config_location: /etc/plexupdate.conf
+plexupdate_cronwrapper: /etc/cron.weekly/plexupdate
+plexupdate_plexserver: 127.0.0.1
+plexupdate_plexport: 32400
+plexupdate_public: true
+plexupdate_notify: false
+plexupdate_token: ""

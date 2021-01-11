@@ -1,0 +1,36 @@
+---
+
+- hosts: plexservers
+  become: yes
+  vars_files:
+    - vars/plex_vars.yml
+
+  tasks:
+    - name: Install git & wget
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - openssl
+        - wget
+        - git
+
+    - name: Install plex
+      include_tasks: tasks/install_plex.yml
+
+    - name: Install tautulli
+      include_tasks: tasks/install_tautulli.yml
+
+    - name: Install plexupdate
+      include_tasks: tasks/install_plexupdate.yml
+
+  handlers:
+    - name: restart plex
+      service:
+        name: plexmediaserver
+        state: restarted
+
+    - name: restart tautulli
+      service:
+        name: tautulli
+        state: restarted

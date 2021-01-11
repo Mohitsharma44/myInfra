@@ -1,0 +1,55 @@
+---
+- name: Install git
+  package:
+    name: git
+    state: present
+
+# FIXME: This need removing after https://github.com/Tautulli/Tautulli/pull/1153
+- name: Install which
+  yum:
+    name: which
+    state: present
+  when: ansible_distribution == 'CentOS'
+
+- name: Create user
+  group:
+    name: "{{ tautulli_group }}"
+    state: present
+
+- name: Create user
+  user:
+    name: "{{ tautulli_user }}"
+    group: "{{ tautulli_group }}"
+    createhome: false
+
+- name: Clone Tautulli repo
+  git:
+    repo: https://github.com/Tautulli/Tautulli.git
+    dest: "{{ tautulli_install_location }}"
+    version: "{{ tautulli_version }}"
+
+- name: Set permissions
+  file:
+    path: "{{ tautulli_install_location }}"
+    owner: "{{ tautulli_user }}"
+    group: "{{ tautulli_group }}"
+    recurse: true
+  changed_when: false
+
+- block:
+    - name: Move init script for using systemd
+      template:
+        src: tautulli/init-systemd.j2
+        dest: /lib/systemd/system/tautulli.service
+        owner: root
+        group: root
+        mode: 0775
+
+    - name: Autostart Tautulli and restart service
+      systemd:
+        name: tautulli
+        enabled: true
+        daemon_reload: true
+      notify: restart tautulli
+
+  when: ansible_service_mgr == 'systemd'
