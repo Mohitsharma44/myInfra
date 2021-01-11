@@ -1,0 +1,6 @@
+---
+
+datacenter_name: "Phoenix"
+
+dvswitch: "DTestSwitch"
+dvportgroup: "DTestSwitchPG"

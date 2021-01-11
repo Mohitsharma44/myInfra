@@ -1,0 +1,68 @@
+---
+
+- hosts: localhost
+  gather_facts: yes
+  become: no
+  vars_files:
+    - default/main.yml
+  collections:
+    - community.vmware
+
+  tasks:
+  - name: "Create DvSwitch {{ dvswitch }}"
+    community.vmware.vmware_dvswitch:
+      hostname: "{{ vcenter_fqdn }}"
+      username: "{{ vcenter_user }}"
+      password: "{{ vcenter_pass }}"
+      validate_certs: no
+      datacenter: "{{ datacenter_name }}"
+      switch_name: "{{ dvswitch }}"
+      uplink_quantity: 2
+      state: present
+    delegate_to: localhost
+    tags:
+      - create
+
+  - name: "Create Portgroup {{ dvportgroup }} in {{ dvswitch }}"
+    community.vmware.vmware_dvs_portgroup:
+      hostname: "{{ vcenter_fqdn }}"
+      username: "{{ vcenter_user }}"
+      password: "{{ vcenter_pass }}"
+      validate_certs: no
+      switch_name: "{{ dvswitch }}"
+      portgroup_name: "{{ dvportgroup }}"
+      portgroup_type: earlyBinding
+      num_ports: 120
+      vlan_id: 0
+      state: present
+    delegate_to: localhost
+    tags:
+      - create
+
+  - name: "Add host {{ esxi_fqdn }} to {{ dvswitch }}"
+    community.vmware.vmware_dvs_host:
+      hostname: "{{ vcenter_fqdn }}"
+      username: "{{ vcenter_user }}"
+      password: "{{ vcenter_pass }}"
+      validate_certs: no
+      switch_name: "{{ dvswitch }}"
+      esxi_hostname: "{{ esxi_fqdn }}"
+      state: present
+    delegate_to: localhost
+    tags:
+      - create
+
+  - name: "Delete DvSwitch {{ dvswitch }}"
+    community.vmware.vmware_dvswitch:
+      hostname: "{{ vcenter_fqdn }}"
+      username: "{{ vcenter_user }}"
+      password: "{{ vcenter_pass }}"
+      validate_certs: no
+      datacenter: "{{ datacenter_name }}"
+      switch_name: "{{ dvswitch }}"
+      uplink_quantity: 2
+      state: absent
+    delegate_to: localhost
+    tags:
+      - never
+      - delete
