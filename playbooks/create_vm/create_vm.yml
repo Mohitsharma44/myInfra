@@ -1,6 +1,22 @@
 ---
 
-- name: Clone a VM from linux template
+- name: Create VM folder in the datacenter
+  community.vmware.vcenter_folder:
+    hostname: "{{ vcenter_fqdn }}"
+    username: "{{ vcenter_user }}"
+    password: "{{ vcenter_pass }}"
+    validate_certs: no
+    datacenter: "{{ datacenter_name }}"
+    folder_name: "{{ vm_folder_name }}"
+    folder_type: vm
+    state: present
+  register: vm_folder_created
+  delegate_to: localhost
+  failed_when: vm_folder_created.failed
+  tags:
+    - create
+
+- name: "Clone {{ vm_name }} from linux template"
   vmware_guest:
     hostname: "{{ vcenter_fqdn }}"
     username: "{{ vcenter_user }}"
@@ -12,9 +28,24 @@
     name: "{{ vm_name }}"
     state: poweredon
     networks:
-      - name: VM Network
-        #     ip: 192.168.10.11
-        #     netmask: 255.255.255.0
+      # Currently there is a bug where if two
+      # interfaces are defined, the default route/ interface
+      # is not set and this breaks the followup join-ad playbook.
+      # So connect just LAN interface in this playbook and add
+      # more manually from vcenter
+      # - name: DStoragePortGroup
+      #  type: dhcp
+      #   ip: 192.168.15.32
+      #   netmask: 255.255.255.0
+      #   gateway: 192.168.15.1
+      - name: DLanSwitchPortGroup0
+        type: dhcp
+        start_connected: yes
+        #ip: 192.168.11.173
+        #netmask: 255.255.255.0
+        #gateway: 192.168.11.1
+        #mac: 00:50:56:b2:f0:61
+        #dns_servers: "{{ dns_server }}"
     wait_for_ip_address: True
     disk:
       - size_gb: "{{ disk_size_gb }}"
@@ -29,19 +60,46 @@
       hotadd_cpu: True
       hotremove_cpu: True
       hotadd_memory: True
-      version: 14
+      #version: 14
       boot_firmware: "efi"
-    customization:
-      domain: "{{ dns_domain }}"
-      dns_servers:
-        - "{{ dns_server }}"
-      dns_suffix:
-        - "{{ dns_domain }}"
   delegate_to: localhost
   register: new_vm
+  tags:
+    - create
 
-- name: Gather information about the VM
-  vmware_vm_info:
+- name: "Remove DInternetPortGroup0 from {{ vm_name }}"
+  vmware_guest_network:
+    hostname: "{{ vcenter_fqdn }}"
+    username: "{{ vcenter_user }}"
+    password: "{{ vcenter_pass }}"
+    datacenter: "{{ datacenter_name }}"
+    name: "{{ vm_name }}"
+    gather_network_info: no
+    networks:
+      - name: DInternetPortGroup0
+        state: absent
+  ignore_errors: yes
+
+- name: "Attach additional Nics to {{ vm_name }}"
+  vmware_guest_network:
+    hostname: "{{ vcenter_fqdn }}"
+    username: "{{ vcenter_user }}"
+    password: "{{ vcenter_pass }}"
+    datacenter: "{{ datacenter_name }}"
+    name: "{{ vm_name }}"
+    networks:
+      - name: DStoragePortGroup
+        label: DStoragePortGroup
+        state: new
+        device_type: vmxnet3
+        connected: yes
+        start_connected: yes
+  when: connect_vm_to_storage_lan
+  tags:
+    - create
+
+- name: "Gather information about the {{ vm_name }}"
+  community.vmware.vmware_vm_info:
     hostname: "{{ vcenter_fqdn }}"
     username: "{{ vcenter_user }}"
     password: "{{ vcenter_pass }}"
@@ -49,8 +107,10 @@
     folder: "/{{ datacenter_name }}/vm/{{ vm_folder_name }}"
   delegate_to: localhost
   register: vm_info
+  tags:
+    - create
 
-- name: Set some facts about {{ vm_name }}
+- name: "Set some facts about {{ vm_name }}"
   set_fact:
     new_vm: "{{ new_vm|default({}) | combine( item ) }}"
   with_items:
@@ -58,23 +118,29 @@
   vars:
     query: "[?guest_name=='{{ vm_name }}']"
   changed_when: False
+  tags:
+    - create
 
-- name: Add host to group VMs
+- name: "Add {{ vm_name }} to group VMs"
   add_host:
-    name: "{{ new_vm.ip_address }}"
+    name: "{{ new_vm.guest_name }}.{{ dns_domain }}"
     #hostname: "{{ new_vm.guest_name }}"
-    ansible_ssh_host: "{{ new_vm.guest_name }}.{{ dns_domain }}"
+    ansible_ssh_host: "{{ new_vm.ip_address }}"
     ansible_python_interpreter: /usr/bin/python3
     groups: "VMs"
   changed_when: False
+  tags:
+    - create
 
 - name: Flush Mac DNS cache
   shell: "dscacheutil -flushcache; sudo killall -HUP mDNSResponder"
   delegate_to: localhost
   become: yes
   when: new_vm.changed
+  tags:
+    - create
 
-- name: Wait for {{ vm_name }} to become accessible
+- name: "Wait for {{ vm_name }} to become accessible"
   wait_for:
     port: 22
     host: "{{ new_vm.ip_address }}"
@@ -84,3 +150,6 @@
   vars:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   when: new_vm.changed
+  tags:
+    - create
+

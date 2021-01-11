@@ -1,6 +1,6 @@
 ---
 
-- name: Remove virtual machine
+- name: "Remove virtual machine {{ vm_name }}"
   vmware_guest:
     hostname: "{{ vcenter_fqdn }}"
     username: "{{ vcenter_user }}"
@@ -12,6 +12,7 @@
     name: "{{ vm_name }}"
   delegate_to: localhost
   register: del_vm
+  failed_when: false
   with_items:
     - poweredoff
     - absent

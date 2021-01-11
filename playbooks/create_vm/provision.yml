@@ -1,0 +1,41 @@
+- hosts: all
+  gather_facts: yes
+  vars_files:
+    - default/main.yml
+  vars:
+    ansible_ssh_user: root
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  pre_tasks:
+    - name: Downloading required roles
+      local_action: "command ansible-galaxy install -r {{ playbook_dir }}/files/requirements.yml --roles-path {{ playbook_dir }}/roles/"
+      become: false
+      run_once: True
+      changed_when: False
+      tags:
+        - provision
+  tasks:
+    - name: "Joining {{ ad_server.domain }}"
+      import_tasks:
+        file: join_ad.yml
+      when: "'VMs' in group_names"
+      tags:
+        - provision
+
+    - name: "Update network interfaces for storage lan"
+      blockinfile:
+        path: /etc/network/interfaces
+        block: |
+          auto eth1
+          iface eth1 inet dhcp
+
+  post_tasks:
+    - name: "Reboot {{ vm.name }}"
+      reboot:
+        msg: "Final Reboot initiated by Ansible"
+        test_command: whoami
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        connect_timeout: 5
+        reboot_timeout: 300
+      tags:
+        - provision

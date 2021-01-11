@@ -3,7 +3,16 @@
 
 - name: Update hostname
   hostname:
-    name: "{{ hostname }}"
+    name: "{{ inventory_hostname }}"
+
+- name: Reboot the newly created VMs
+  reboot:
+    msg: "Reboot initiated by Ansible for DNS server to uptake new hostname"
+    test_command: whoami
+    pre_reboot_delay: 0
+    post_reboot_delay: 30
+    connect_timeout: 5
+    reboot_timeout: 300
 
 - name: Disable systemd-resolved
   service:
@@ -22,13 +31,14 @@
 - name: Install dependencies
   block:
     - name: Remove old version of adcli if exists
-      package:
+      apt:
         name: adcli=0.8*
         state: absent
+        update_cache: yes
 
     - name: Install adcli v 0.9.0-1 (Fix for https://bugs.launchpad.net/ubuntu/+source/adcli/+bug/1842951)
       apt:
-        deb: http://ftp.de.debian.org/debian/pool/main/a/adcli/adcli_0.9.0-1_amd64.deb
+        deb: http://ftp.debian.org/debian/pool/main/a/adcli/adcli_0.9.0-1_amd64.deb
 
     - name: Install packages to join the realm
       package:
@@ -51,20 +61,28 @@
     name: pexpect
 
 - name: Discover AD domain
-  shell: /bin/bash -c "/usr/sbin/realm discover {{ ad_server.domain }} | grep 'configured:' | awk '{print $2}'"
+  shell: /bin/bash -c "/usr/sbin/realm discover {{ ad_server.name }}.{{ ad_server.domain }} | grep 'configured:' | awk '{print $2}'"
   changed_when: false
   register: ad_found
 
 - name: Set fact based on if we need to join AD
   set_fact:
-    join_ad: "{{ (ad_found.stdout.split(': ')[-1] == 'no') | ternary(True, False) }}"
+    join_ad: "{{ (ad_found.stdout.split(': ')[-1] == 'no') or (force_join_ad == True) | ternary(True, False) }}"
 
-- name: Join the machine to AD domain
-  expect:
-    command: /bin/bash -c "/usr/sbin/realm join -U {{ ad_server.admin_user }} {{ ad_server.domain }}"
-    responses:
-      Password.*: "{{ ad_server.admin_pass }}"
-  when: join_ad
+- block:
+  - name: Leave the existing domain
+    expect:
+      command: /bin/bash -c "/usr/sbin/realm leave -U {{ ad_server.admin_user }} {{ ad_server.domain }}"
+      responses:
+        Password.*: "{{ ad_server.admin_pass }}"
+    when: force_join_ad
+    ignore_errors: yes
+  - name: Join the machine to AD domain
+    expect:
+      command: /bin/bash -c "/usr/sbin/realm join -U {{ ad_server.admin_user }} {{ ad_server.name }}.{{ ad_server.domain }}"
+      responses:
+        Password.*: "{{ ad_server.admin_pass }}"
+    when: join_ad
 
 - name: Enable creating home directory for user
   block:
@@ -166,7 +184,7 @@
 
           [domain/{{ domain }}]
           default_shell = /bin/bash
-          ad_server = {{ ad_server.domain }}
+          ad_server = {{ ad_server.name }}.{{ ad_server.domain }}
           krb5_store_password_if_offline = True
           cache_credentials = True
           krb5_realm = {{ domain| upper }}
@@ -174,7 +192,7 @@
           id_provider = ad
           fallback_homedir = /home/%u
           full_name_format = %1$s
-          ad_domain = {{ domain }}
+          ad_domain = {{ ad_server.domain }}
           #use_fully_qualified_names = True
           ldap_id_mapping = True
           access_provider = simple

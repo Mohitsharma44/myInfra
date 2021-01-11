@@ -1,25 +1,25 @@
 ---
 
 datacenter_name: "Phoenix"
-vm_folder_name: "VMLab"
-linux_template: "ubuntu-1604-template"
-dns_domain: "sharmamohit.com"
-target_esx_datastore: "Silo"
+vm_folder_name: "Production"
+linux_template: "ubuntu-2004-template"
+dns_domain: "phoenixdc.sharmamohit.com"
+target_esx_datastore: "Internal_ssd_0_and_1"
 vcenter_fqdn: "vcsa01.sharmamohit.com"
 
 # VM config
-vm_name: "testbuntu"
-disk_size_gb: 10
+disk_size_gb: 30
 num_cpu: 2
-ram_mb: 2048
+ram_mb: 4096
 
 # For AD stuff
-hostname: "{{ vm_name }}.{{ dns_domain }}"
+#hostname: "{{ vm_name }}.{{ dns_domain }}"
 domain: "{{ dns_domain }}"
-dns_server: 192.168.11.1
+dns_server: 192.168.40.1
 ad_server:
-  domain: "ad.{{ dns_domain }}"
-  ip: 192.168.11.51
+  name: "ad"
+  domain: "sharmamohit.com"
+  ip: 192.168.40.50
   base_dn: "DC=sharmamohit,DC=com"
   admin_user: Administrator
   admin_pass: !vault |
@@ -35,3 +35,5 @@ permit_ad_groups:
   - Domain Admins
   - Domain Users
 deny_all_domain_users: false
+force_join_ad: yes
+connect_vm_to_storage_lan: yes

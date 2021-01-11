@@ -2,39 +2,42 @@
 
 - hosts: localhost
   gather_facts: yes
+  become: yes
   vars_files:
+    - ~/.ansible_become_pass
     - default/main.yml
+  vars:
+    create_vms:
+      - { name: ansible-test-vm }
+
   tasks:
     - name: Create new VM
-      import_tasks: create_vm.yml
+      include_tasks: create_vm.yml
+      vars:
+        - vm_name: "{{ vm.name }}"
+      args:
+        apply:
+          tags:
+            - create
+      loop: "{{ create_vms }}"
+      loop_control:
+        loop_var: vm
       tags:
         - create
 
     - name: Delete VM
-      import_tasks: delete_vm.yml
+      include_tasks: delete_vm.yml
+      vars:
+        - vm_name: "{{ vm.name }}"
+      args:
+        apply:
+          tags:
+            - delete
+      loop: "{{ create_vms }}"
+      loop_control:
+        loop_var: vm
       tags:
         - never
         - delete
 
-- hosts: VMs
-  gather_facts: yes
-  vars_files:
-    - default/main.yml
-  vars:
-    ansible_ssh_user: root
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-  pre_tasks:
-    - name: Downloading required roles
-      local_action: "command ansible-galaxy install -r {{ playbook_dir }}/files/requirements.yml --roles-path {{ playbook_dir }}/roles/"
-      become: false
-      run_once: True
-      changed_when: False
-      tags:
-        - create
-  tasks:
-    - name: "Joining {{ ad_server.domain }}"
-      import_tasks:
-        file: join_ad.yml
-      when: "'VMs' in group_names"
-      tags:
-        - create
+- import_playbook: provision.yml
