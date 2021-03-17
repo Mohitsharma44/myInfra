@@ -10,9 +10,21 @@ variable "number_of_instances" {
   default     = 1
 }
 
+variable "vm_template_name" {
+  description = "Name of the vm template to use for cloning"
+  type        = string
+  default     = "ubuntu-2004-template"
+}
+
 variable "vm_folder" {
   description = "Name of vSphere folder to add VM to"
   type        = string
+}
+
+variable "create_vm_folder" {
+  description = "Whether to create vm folder or not"
+  type        = bool
+  default     = true
 }
 
 variable "vm_name_prefix" {

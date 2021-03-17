@@ -2,6 +2,8 @@ module "create_vm" {
   source              = "../modules/clone_vm"
   number_of_instances = var.number_of_instances
   vm_folder           = var.vm_folder
+  vm_template_name    = var.vm_template_name
+  create_vm_folder    = false
   vm_name_prefix      = var.vm_name_prefix
   cpus                = var.cpus
   memory              = var.memory
@@ -20,10 +22,11 @@ locals {
 
 # generate inventory file for Ansible
 resource "local_file" "hosts_cfg" {
-  filename = "../../inventories/tfhosts"
+  filename = "../../ansible/inventories/tfhosts"
   content = templatefile("./templates/hosts.tpl",
     {
-      vms = local.vms
+      vm_group = var.vm_name_prefix,
+      vms      = local.vms
     }
   )
 }
@@ -31,8 +34,8 @@ resource "local_file" "hosts_cfg" {
 resource "null_resource" "provision_vm" {
   provisioner "local-exec" {
     command = <<EOT
-    cd ../../ && \
-    ansible-playbook -i inventories/tfhosts --limit '${join(",", [for vm in local.vms : vm.fqdn])},' playbooks/create_vm/provision.yml
+    cd ../../ansible && \
+    ANSIBLE_FORCE_COLOR=1 ansible-playbook -i inventories/tfhosts --limit '${join(",", [for vm in local.vms : vm.fqdn])},' playbooks/create_vm/provision.yml
     EOT
   }
 }

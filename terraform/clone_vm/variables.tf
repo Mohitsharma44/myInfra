@@ -1,3 +1,15 @@
+variable "vm_template_name" {
+  description = "Name of the vm template to use for cloning"
+  type        = string
+  default     = "ubuntu-2004-template"
+}
+
+variable "vm_group" {
+  description = "Group name for the VMs. This will be added to ansible hosts file"
+  type        = string
+  default     = ""
+}
+
 variable "vm_folder" {
   description = "Name of vSphere folder to add VM to"
   type        = string

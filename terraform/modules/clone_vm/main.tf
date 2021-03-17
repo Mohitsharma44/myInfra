@@ -2,10 +2,19 @@ data "vsphere_datacenter" "dc" {
   name = "Phoenix"
 }
 
+resource "time_sleep" "wait_10_seconds" {
+  destroy_duration = "10s"
+}
+
 resource "vsphere_folder" "folder" {
+  count         = var.create_vm_folder ? 1 : 0
   path          = var.vm_folder
   type          = "vm"
   datacenter_id = data.vsphere_datacenter.dc.id
+  lifecycle {
+    create_before_destroy = false
+  }
+  depends_on = [time_sleep.wait_10_seconds]
 }
 
 data "vsphere_network" "portgroups" {
@@ -25,7 +34,7 @@ data "vsphere_compute_cluster" "compute_cluster" {
 }
 
 data "vsphere_virtual_machine" "template" {
-  name          = "ubuntu-2004-template"
+  name          = var.vm_template_name
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
@@ -70,4 +79,8 @@ resource "vsphere_virtual_machine" "vm" {
   lifecycle {
     create_before_destroy = false
   }
+  depends_on = [
+    vsphere_folder.folder
+  ]
+
 }
